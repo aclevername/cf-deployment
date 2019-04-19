@@ -4,6 +4,7 @@
 groups:
 - name: update-releases
   jobs:
+  - deploy
   #@ for r in data.values.baseReleases:
   - #@ "update-" + r.name
   #@ end
@@ -103,3 +104,63 @@ jobs:
       MANIFEST_NAME: cf-deployment.yml
       MANIFEST_DESTINATION: cf-deployment.yml
 #@ end
+
+- name: deploy
+  serial_groups:
+  - update-release
+  public: true
+  plan:
+  - aggregate:
+    - get: cf-deployment-release-candidate
+      passed:
+      #@ for r in data.values.baseReleases:
+      - #@ "update-" + r.name
+      #@ end
+    - get: cf-deployment-concourse-tasks
+    - get: runtime-ci
+    - get: relint-envs
+  - task: bbl-up
+    file: cf-deployment-concourse-tasks/bbl-up/task.yml
+    params:
+      BBL_STATE_DIR: environments/test/pre-dev/bbl-state
+      BBL_IAAS: gcp
+      BBL_ENV_NAME: pre-dev
+      BBL_GCP_SERVICE_ACCOUNT_KEY: environments/test/pre-dev/google_account_creds.json
+      BBL_GCP_REGION: us-central1
+      BBL_LB_CERT: ((pre_dev_cf_lb_cert.certificate))
+      BBL_LB_KEY: ((pre_dev_cf_lb_cert.private_key))
+      LB_DOMAIN: pre-dev.cf-app.com
+    input_mapping:
+      bbl-state: relint-envs
+      bbl-config: bosh-bootloader
+    ensure:
+      put: relint-envs
+      params:
+        repository: updated-bbl-state
+        rebase: true
+  - task: bosh-deploy-cf
+    file: cf-deployment-concourse-tasks/bosh-deploy/task.yml
+    input_mapping:
+      bbl-state: relint-envs
+      cf-deployment: cf-deployment-release-candidate
+      vars-files: relint-envs
+    params:
+      BBL_STATE_DIR: environments/test/pre-dev/bbl-state
+      SYSTEM_DOMAIN: pre-dev.cf-app.com
+      OPS_FILES: |
+        operations/experimental/fast-deploy-with-downtime-and-danger.yml
+        operations/use-compiled-releases.yml
+  - task: ensure-gcloud-backend-service-healthy
+    file: runtime-ci/tasks/ensure-gcloud-backend-service-healthy/task.yml
+    input_mapping:
+      google-creds-dir: relint-envs
+    params:
+      GCP_PROJECT_ID: ((pre_dev_gcp_project))
+      GCP_BACKEND_SERVICE: ((pre_dev_router_backend_service))
+      GOOGLE_ACCOUNT_CREDS_PATH: environments/test/pre-dev/google_account_creds.json
+  - task: ensure-api-healthy
+    file: runtime-ci/tasks/ensure-api-healthy/task.yml
+    input_mapping:
+      cats-integration-config: relint-envs
+    params:
+      CONFIG_FILE_PATH: environments/test/pre-dev/integration_config.json

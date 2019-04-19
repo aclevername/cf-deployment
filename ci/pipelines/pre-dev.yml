@@ -5,6 +5,7 @@
 groups:
 - name: update-releases
   jobs:
+  - deploy
   - update-binary-buildpack
   - update-bosh-dns-aliases
   - update-bpm
@@ -1571,3 +1572,90 @@ jobs:
     params:
       MANIFEST_NAME: cf-deployment.yml
       MANIFEST_DESTINATION: cf-deployment.yml
+- name: deploy
+  serial_groups:
+  - update-release
+  public: true
+  plan:
+  - aggregate:
+    - get: cf-deployment-release-candidate
+      passed:
+      - update-binary-buildpack
+      - update-bosh-dns-aliases
+      - update-bpm
+      - update-capi
+      - update-cf-networking
+      - update-cf-smoke-tests
+      - update-cf-syslog-drain
+      - update-cflinuxfs3
+      - update-diego
+      - update-dotnet-core-buildpack
+      - update-garden-runc
+      - update-go-buildpack
+      - update-java-buildpack
+      - update-log-cache
+      - update-loggregator
+      - update-loggregator-agent
+      - update-nats
+      - update-nginx-buildpack
+      - update-nodejs-buildpack
+      - update-php-buildpack
+      - update-python-buildpack
+      - update-pxc
+      - update-r-buildpack
+      - update-routing
+      - update-ruby-buildpack
+      - update-silk
+      - update-staticfile-buildpack
+      - update-statsd-injector
+      - update-uaa
+      - update-credhub
+      - update-cf-cli
+    - get: cf-deployment-concourse-tasks
+    - get: runtime-ci
+    - get: relint-envs
+  - task: bbl-up
+    file: cf-deployment-concourse-tasks/bbl-up/task.yml
+    params:
+      BBL_STATE_DIR: environments/test/pre-dev/bbl-state
+      BBL_IAAS: gcp
+      BBL_ENV_NAME: pre-dev
+      BBL_GCP_SERVICE_ACCOUNT_KEY: environments/test/pre-dev/google_account_creds.json
+      BBL_GCP_REGION: us-central1
+      BBL_LB_CERT: ((pre_dev_cf_lb_cert.certificate))
+      BBL_LB_KEY: ((pre_dev_cf_lb_cert.private_key))
+      LB_DOMAIN: pre-dev.cf-app.com
+    input_mapping:
+      bbl-state: relint-envs
+      bbl-config: bosh-bootloader
+    ensure:
+      put: relint-envs
+      params:
+        repository: updated-bbl-state
+        rebase: true
+  - task: bosh-deploy-cf
+    file: cf-deployment-concourse-tasks/bosh-deploy/task.yml
+    input_mapping:
+      bbl-state: relint-envs
+      cf-deployment: cf-deployment-release-candidate
+      vars-files: relint-envs
+    params:
+      BBL_STATE_DIR: environments/test/pre-dev/bbl-state
+      SYSTEM_DOMAIN: pre-dev.cf-app.com
+      OPS_FILES: |
+        operations/experimental/fast-deploy-with-downtime-and-danger.yml
+        operations/use-compiled-releases.yml
+  - task: ensure-gcloud-backend-service-healthy
+    file: runtime-ci/tasks/ensure-gcloud-backend-service-healthy/task.yml
+    input_mapping:
+      google-creds-dir: relint-envs
+    params:
+      GCP_PROJECT_ID: ((pre_dev_gcp_project))
+      GCP_BACKEND_SERVICE: ((pre_dev_router_backend_service))
+      GOOGLE_ACCOUNT_CREDS_PATH: environments/test/pre-dev/google_account_creds.json
+  - task: ensure-api-healthy
+    file: runtime-ci/tasks/ensure-api-healthy/task.yml
+    input_mapping:
+      cats-integration-config: relint-envs
+    params:
+      CONFIG_FILE_PATH: environments/test/pre-dev/integration_config.json
