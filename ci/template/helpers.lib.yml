@@ -119,3 +119,41 @@ plan:
       params:
         bump: #@ bump
 #@ end
+
+#@ def pool_resource(pool):
+name: #@ "{}-pool".format(pool)
+type: pool
+source:
+  uri: git@github.com:cloudfoundry/relint-ci-pools
+  branch: master
+  pool: #@ "cf-deployment/{}".format(pool)
+  private_key: ((relint_ci_pools_readwrite_deploy_key.private_key))
+#@ end
+
+#@ def acquire_pool(pool):
+name: #@ "{}-acquire-pool".format(pool)
+serial: true
+public: true
+plan:
+- aggregate:
+  - get: cf-deployment-develop
+    trigger: true
+    passed:
+    - unit-test-ops-files
+    - unit-test-golang-tests
+    - unit-test-update-releases-coverage
+  - put: #@ "{}-pool".format(pool)
+    params: {acquire: true}
+#@ end
+
+#@ def release_pool_manual(pool):
+name: #@ "{}-release-pool-manual".format(pool)
+public: true
+plan:
+- get: #@ "{}-pool".format(pool)
+ensure:
+  try:
+    put: #@ "{}-pool".format(pool)
+    params:
+      release: #@ "{}-pool".format(pool)
+#@ end

@@ -1,3 +1,4 @@
+#@ load("@ytt:data", "data")
 #@ load("helpers.lib.yml",
 #@   "delete_deployment",
 #@   "add_tcp_domain",
@@ -6,6 +7,9 @@
 #@   "update_integration_config",
 #@   "run_cats",
 #@   "ship_it",
+#@   "pool_resource",
+#@   "acquire_pool",
+#@   "release_pool_manual",
 #@ )
 
 ---
@@ -126,48 +130,9 @@ resource_types:
     repository: cloudfoundry/bosh-deployment-resource
 
 resources:
-- name: fresh-pool
-  type: pool
-  source:
-    uri: git@github.com:cloudfoundry/relint-ci-pools
-    branch: master
-    pool: cf-deployment/fresh
-    private_key: ((relint_ci_pools_readwrite_deploy_key.private_key))
-- name: upgrade-pool
-  type: pool
-  source:
-    uri: git@github.com:cloudfoundry/relint-ci-pools
-    branch: master
-    pool: cf-deployment/upgrade
-    private_key: ((relint_ci_pools_readwrite_deploy_key.private_key))
-- name: lite-pool
-  type: pool
-  source:
-    uri: git@github.com:cloudfoundry/relint-ci-pools
-    branch: master
-    pool: cf-deployment/lite
-    private_key: ((relint_ci_pools_readwrite_deploy_key.private_key))
-- name: experimental-pool
-  type: pool
-  source:
-    uri: git@github.com:cloudfoundry/relint-ci-pools
-    branch: master
-    pool: cf-deployment/experimental
-    private_key: ((relint_ci_pools_readwrite_deploy_key.private_key))
-- name: stable-pool
-  type: pool
-  source:
-    uri: git@github.com:cloudfoundry/relint-ci-pools
-    branch: master
-    pool: cf-deployment/stable
-    private_key: ((relint_ci_pools_readwrite_deploy_key.private_key))
-- name: bbr-pool
-  type: pool
-  source:
-    uri: git@github.com:cloudfoundry/relint-ci-pools
-    branch: master
-    pool: bbr
-    private_key: ((relint_ci_pools_readwrite_deploy_key.private_key))
+#@ for p in data.values.pools:
+- #@ pool_resource(p)
+#@ end
 
 - name: relint-envs
   type: git
@@ -194,7 +159,6 @@ resources:
   source:
     branch: master
     uri: https://github.com/cloudfoundry/bosh-bootloader
-
 - name: cf-deployment-develop
   type: git
   source:
@@ -268,7 +232,6 @@ resources:
   source:
     branch: master
     uri: https://github.com/cloudfoundry/bosh-deployment.git
-
 - name: cf-deployment-version
   type: semver
   source:
@@ -308,52 +271,11 @@ jobs:
     input_mapping:
       repo: cf-deployment-all-branches
 
-- name: fresh-acquire-pool
-  serial: true
-  public: true
-  plan:
-  - aggregate:
-    - get: cf-deployment-develop
-      trigger: true
-      passed: [unit-test-ops-files, unit-test-golang-tests, unit-test-update-releases-coverage]
-    - put: fresh-pool
-      params: {acquire: true}
-
-- name: upgrade-acquire-pool
-  serial: true
-  public: true
-  plan:
-  - aggregate:
-    - get: cf-deployment-develop
-      trigger: true
-      passed: [unit-test-ops-files, unit-test-golang-tests, unit-test-update-releases-coverage]
-    - put: upgrade-pool
-      params: {acquire: true}
-
-- name: lite-acquire-pool
-  serial: true
-  public: true
-  plan:
-  - timeout: 4h
-    do:
-    - aggregate:
-      - get: cf-deployment-develop
-        trigger: true
-        passed: [unit-test-ops-files, unit-test-golang-tests, unit-test-update-releases-coverage]
-    - put: lite-pool
-      params: {acquire: true}
-
-- name: bbr-acquire-pool
-  public: true
-  serial: true
-  plan:
-  - timeout: 4h
-    aggregate:
-    - get: cf-deployment-develop
-      trigger: true
-      passed: [unit-test-ops-files, unit-test-golang-tests, unit-test-update-releases-coverage]
-    - put: bbr-pool
-      params: {acquire: true}
+#@ for p in data.values.pools:
+#@ if/end p!="stable":
+- #@ acquire_pool(p)
+- #@ release_pool_manual(p)
+#@ end
 
 - name: lint-cf-deployment-manifest
   serial: false
@@ -612,17 +534,6 @@ jobs:
           task_creation
           service_instance_sharing
 
-- name: experimental-acquire-pool
-  public: true
-  serial: true
-  plan:
-  - aggregate:
-    - get: cf-deployment-develop
-      trigger: true
-      passed: [unit-test-ops-files, unit-test-golang-tests, unit-test-update-releases-coverage]
-    - put: experimental-pool
-      params: {acquire: true}
-
 - name: experimental-release-pool
   public: true
   plan:
@@ -642,33 +553,6 @@ jobs:
     - put: stable-pool
       params: {acquire: true}
 
-- name: fresh-release-pool-manual
-  public: true
-  plan:
-  - get: fresh-pool
-  ensure:
-    try:
-      put: fresh-pool
-      params: {release: fresh-pool}
-
-- name: upgrade-release-pool-manual
-  public: true
-  plan:
-  - get: upgrade-pool
-  ensure:
-    try:
-      put: upgrade-pool
-      params: {release: upgrade-pool}
-
-- name: bbr-release-pool-manual
-  public: true
-  plan:
-  - get: bbr-pool
-  ensure:
-    try:
-      put: bbr-pool
-      params: {release: bbr-pool}
-
 - name: upgrade-release-pool
   public: true
   plan:
@@ -686,33 +570,6 @@ jobs:
     trigger: true
   - put: bbr-pool
     params: {release: bbr-pool}
-
-- name: lite-release-pool-manual
-  public: true
-  plan:
-  - get: lite-pool
-  ensure:
-    try:
-      put: lite-pool
-      params: {release: lite-pool}
-
-- name: stable-release-pool-manual
-  public: true
-  plan:
-  - get: stable-pool
-  ensure:
-    try:
-      put: stable-pool
-      params: {release: stable-pool}
-
-- name: experimental-release-pool-manual
-  public: true
-  plan:
-  - get: experimental-pool
-  ensure:
-    try:
-      put: experimental-pool
-      params: {release: experimental-pool}
 
 - name: experimental-ops-files
   public: true

@@ -1,5 +1,13 @@
 #@data/values
 ---
+pools:
+- fresh
+- upgrade
+- experimental
+- lite
+- stable
+- bbr
+
 baseReleases:
 - name: binary-buildpack
   repository: cloudfoundry/binary-buildpack-release

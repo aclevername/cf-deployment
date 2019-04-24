@@ -131,19 +131,19 @@ resources:
     branch: master
     pool: cf-deployment/upgrade
     private_key: ((relint_ci_pools_readwrite_deploy_key.private_key))
-- name: lite-pool
-  type: pool
-  source:
-    uri: git@github.com:cloudfoundry/relint-ci-pools
-    branch: master
-    pool: cf-deployment/lite
-    private_key: ((relint_ci_pools_readwrite_deploy_key.private_key))
 - name: experimental-pool
   type: pool
   source:
     uri: git@github.com:cloudfoundry/relint-ci-pools
     branch: master
     pool: cf-deployment/experimental
+    private_key: ((relint_ci_pools_readwrite_deploy_key.private_key))
+- name: lite-pool
+  type: pool
+  source:
+    uri: git@github.com:cloudfoundry/relint-ci-pools
+    branch: master
+    pool: cf-deployment/lite
     private_key: ((relint_ci_pools_readwrite_deploy_key.private_key))
 - name: stable-pool
   type: pool
@@ -157,7 +157,7 @@ resources:
   source:
     uri: git@github.com:cloudfoundry/relint-ci-pools
     branch: master
-    pool: bbr
+    pool: cf-deployment/bbr
     private_key: ((relint_ci_pools_readwrite_deploy_key.private_key))
 - name: relint-envs
   type: git
@@ -308,6 +308,15 @@ jobs:
     - put: fresh-pool
       params:
         acquire: true
+- name: fresh-release-pool-manual
+  public: true
+  plan:
+  - get: fresh-pool
+  ensure:
+    try:
+      put: fresh-pool
+      params:
+        release: fresh-pool
 - name: upgrade-acquire-pool
   serial: true
   public: true
@@ -322,28 +331,75 @@ jobs:
     - put: upgrade-pool
       params:
         acquire: true
+- name: upgrade-release-pool-manual
+  public: true
+  plan:
+  - get: upgrade-pool
+  ensure:
+    try:
+      put: upgrade-pool
+      params:
+        release: upgrade-pool
+- name: experimental-acquire-pool
+  serial: true
+  public: true
+  plan:
+  - aggregate:
+    - get: cf-deployment-develop
+      trigger: true
+      passed:
+      - unit-test-ops-files
+      - unit-test-golang-tests
+      - unit-test-update-releases-coverage
+    - put: experimental-pool
+      params:
+        acquire: true
+- name: experimental-release-pool-manual
+  public: true
+  plan:
+  - get: experimental-pool
+  ensure:
+    try:
+      put: experimental-pool
+      params:
+        release: experimental-pool
 - name: lite-acquire-pool
   serial: true
   public: true
   plan:
-  - timeout: 4h
-    do:
-    - aggregate:
-      - get: cf-deployment-develop
-        trigger: true
-        passed:
-        - unit-test-ops-files
-        - unit-test-golang-tests
-        - unit-test-update-releases-coverage
+  - aggregate:
+    - get: cf-deployment-develop
+      trigger: true
+      passed:
+      - unit-test-ops-files
+      - unit-test-golang-tests
+      - unit-test-update-releases-coverage
     - put: lite-pool
       params:
         acquire: true
-- name: bbr-acquire-pool
+- name: lite-release-pool-manual
   public: true
-  serial: true
   plan:
-  - timeout: 4h
-    aggregate:
+  - get: lite-pool
+  ensure:
+    try:
+      put: lite-pool
+      params:
+        release: lite-pool
+- name: stable-release-pool-manual
+  public: true
+  plan:
+  - get: stable-pool
+  ensure:
+    try:
+      put: stable-pool
+      params:
+        release: stable-pool
+- name: bbr-acquire-pool
+  serial: true
+  public: true
+  plan:
+  - aggregate:
     - get: cf-deployment-develop
       trigger: true
       passed:
@@ -353,6 +409,15 @@ jobs:
     - put: bbr-pool
       params:
         acquire: true
+- name: bbr-release-pool-manual
+  public: true
+  plan:
+  - get: bbr-pool
+  ensure:
+    try:
+      put: bbr-pool
+      params:
+        release: bbr-pool
 - name: lint-cf-deployment-manifest
   serial: false
   public: true
@@ -688,20 +753,6 @@ jobs:
           diego_docker
           task_creation
           service_instance_sharing
-- name: experimental-acquire-pool
-  public: true
-  serial: true
-  plan:
-  - aggregate:
-    - get: cf-deployment-develop
-      trigger: true
-      passed:
-      - unit-test-ops-files
-      - unit-test-golang-tests
-      - unit-test-update-releases-coverage
-    - put: experimental-pool
-      params:
-        acquire: true
 - name: experimental-release-pool
   public: true
   plan:
@@ -723,33 +774,6 @@ jobs:
     - put: stable-pool
       params:
         acquire: true
-- name: fresh-release-pool-manual
-  public: true
-  plan:
-  - get: fresh-pool
-  ensure:
-    try:
-      put: fresh-pool
-      params:
-        release: fresh-pool
-- name: upgrade-release-pool-manual
-  public: true
-  plan:
-  - get: upgrade-pool
-  ensure:
-    try:
-      put: upgrade-pool
-      params:
-        release: upgrade-pool
-- name: bbr-release-pool-manual
-  public: true
-  plan:
-  - get: bbr-pool
-  ensure:
-    try:
-      put: bbr-pool
-      params:
-        release: bbr-pool
 - name: upgrade-release-pool
   public: true
   plan:
@@ -771,33 +795,6 @@ jobs:
   - put: bbr-pool
     params:
       release: bbr-pool
-- name: lite-release-pool-manual
-  public: true
-  plan:
-  - get: lite-pool
-  ensure:
-    try:
-      put: lite-pool
-      params:
-        release: lite-pool
-- name: stable-release-pool-manual
-  public: true
-  plan:
-  - get: stable-pool
-  ensure:
-    try:
-      put: stable-pool
-      params:
-        release: stable-pool
-- name: experimental-release-pool-manual
-  public: true
-  plan:
-  - get: experimental-pool
-  ensure:
-    try:
-      put: experimental-pool
-      params:
-        release: experimental-pool
 - name: experimental-ops-files
   public: true
   plan:
