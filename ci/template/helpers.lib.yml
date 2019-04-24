@@ -1,0 +1,121 @@
+#@ def delete_deployment(env, ignore_errors=False, deployment=""):
+task: delete-deployment
+file: cf-deployment-concourse-tasks/bosh-delete-deployment/task.yml
+input_mapping:
+  bbl-state: relint-envs
+params:
+  #@ if/end ignore_errors:
+  IGNORE_ERRORS: #@ ignore_errors
+  BBL_STATE_DIR: #@ "environments/test/{}/bbl-state".format(env)
+  #@ if/end deployment!="":
+  DEPLOYMENT_NAME: #@ deployment
+#@ end
+
+#@ def bosh_clean_up(env):
+task: run-bosh-cleanup
+file: cf-deployment-concourse-tasks/bosh-cleanup/task.yml
+input_mapping:
+  bbl-state: relint-envs
+params:
+  BBL_STATE_DIR: #@ "environments/test/{}/bbl-state".format(env)
+#@ end
+
+#@ def update_integration_config(env):
+task: update-integration-configs
+file: cf-deployment-concourse-tasks/update-integration-configs/task.yml
+params:
+  BBL_STATE_DIR: #@ "environments/test/{}/bbl-state".format(env)
+  CATS_INTEGRATION_CONFIG_FILE: #@ "environments/test/{}/integration_config.json".format(env)
+input_mapping:
+  bbl-state: relint-envs
+  integration-configs: relint-envs
+ensure:
+  put: relint-envs
+  params:
+    repository: updated-integration-configs
+    rebase: true
+#@ end
+
+#@ def run_cats(env,capture_logs=False, nodes=-1):
+task: run-cats
+input_mapping:
+  integration-config: relint-envs
+  cf-acceptance-tests: cf-acceptance-tests-rc
+file: cf-deployment-concourse-tasks/run-cats/task.yml
+params:
+  CONFIG_FILE_PATH: #@ "environments/test/{}/integration_config.json".format(env)
+  REPORTER_CONFIG_FILE_PATH: #@ "environments/test/{}/reporter_config.json".format(env)
+  RELINT_VERBOSE_AUTH: "true"
+  #@ if/end capture_logs:
+  CAPTURE_LOGS: #@ capture_logs
+  #@ if/end nodes!=-1:
+  NODES: #@ nodes
+#@ end
+
+#@ def open_asg(env,ig,deployment="",system_domain=""):
+#@   if system_domain=="":
+#@     system_domain="{}.cf-app.com".format(env)
+#@   end
+task: #@ "open-asgs-for-{}".format(ig)
+file: cf-deployment-concourse-tasks/open-asgs-for-bosh-instance-group/task.yml
+input_mapping:
+  bbl-state: relint-envs
+params:
+  BBL_STATE_DIR: #@ "environments/test/{}/bbl-state".format(env)
+  #@ if/end deployment!="":
+  BOSH_DEPLOYMENT: #@ deployment
+  INSTANCE_GROUP_NAME: #@ ig
+  SYSTEM_DOMAIN: #@ system_domain
+  SECURITY_GROUP_NAME: #@ ig
+#@ end
+
+#@ def add_tcp_domain(env):
+task: add-tcp-domain
+file: runtime-ci/tasks/add-tcp-domain/task.yml
+input_mapping:
+  bbl-state: relint-envs
+params:
+  BBL_STATE_DIR: #@ "environments/test/{}/bbl-state".format(env)
+  SYSTEM_DOMAIN: #@ "{}.cf-app.com".format(env)
+#@ end
+
+#@ def manage_gcp_dns(action):
+task: #@ action + "-gcp-dns"
+file: runtime-ci/tasks/manage-gcp-dns/task.yml
+input_mapping:
+  bbl-state: relint-envs
+params:
+  BBL_STATE_DIR: environments/test/pre-dev/bbl-state
+  GCP_DNS_SERVICE_ACCOUNT_KEY: ((concourse_gcp_service_account_json))
+  GCP_DNS_ZONE_NAME: test-relint-rocks
+  GCP_DNS_RECORD_SET_NAME: pre-dev.test.relint.rocks
+  ACTION: #@ action
+#@ end
+
+#@ def ship_it(bump):
+name: #@ "ship-it-{}".format(bump)
+public: true
+plan:
+  - do:
+    - get: runtime-ci
+    - get: cf-deployment-version
+      params:
+        bump: #@ bump
+    - get: cf-deployment-develop
+    - get: cf-deployment-release-candidate
+      passed: [bless-manifest]
+    - task: update-cf-deployment-manifest-version
+      file: runtime-ci/tasks/record-cfd-version-in-manifest/task.yml
+    - put: cf-deployment-master
+      params:
+        repository: cf-deployment-rc-with-updated-version
+        tag: cf-deployment-version/version
+        tag_prefix: v
+    - put: cf-deployment-develop
+      params:
+        repository: cf-deployment-rc-with-updated-version
+        merge: true
+    - put: cf-deployment-version
+      params:
+        bump: #@ bump
+#@ end

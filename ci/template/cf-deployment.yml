@@ -1,7 +1,14 @@
-## ======================================================================
-## GENERATED FILE. DO NOT EDIT
-## ======================================================================
+#@ load("helpers.lib.yml",
+#@   "delete_deployment",
+#@   "add_tcp_domain",
+#@   "bosh_clean_up",
+#@   "open_asg",
+#@   "update_integration_config",
+#@   "run_cats",
+#@   "ship_it",
+#@ )
 
+---
 groups:
 - name: cf-deployment
   jobs:
@@ -107,6 +114,7 @@ groups:
   - stable-release-pool-manual
   - stable-update-cats-cfd-branch
   - cleanup-stable-periodic-cats
+
 resource_types:
 - name: terraform
   type: docker-image
@@ -116,6 +124,7 @@ resource_types:
   type: docker-image
   source:
     repository: cloudfoundry/bosh-deployment-resource
+
 resources:
 - name: fresh-pool
   type: pool
@@ -159,6 +168,7 @@ resources:
     branch: master
     pool: bbr
     private_key: ((relint_ci_pools_readwrite_deploy_key.private_key))
+
 - name: relint-envs
   type: git
   source:
@@ -184,6 +194,7 @@ resources:
   source:
     branch: master
     uri: https://github.com/cloudfoundry/bosh-bootloader
+
 - name: cf-deployment-develop
   type: git
   source:
@@ -257,6 +268,7 @@ resources:
   source:
     branch: master
     uri: https://github.com/cloudfoundry/bosh-deployment.git
+
 - name: cf-deployment-version
   type: semver
   source:
@@ -264,7 +276,7 @@ resources:
     uri: git@github.com:cloudfoundry/cf-relint-ci-semver.git
     branch: master
     private_key: ((cf_relint_ci_semver_readwrite_deploy_key.private_key))
-    git_user: CF MEGA BOT <cf-mega@pivotal.io>
+    git_user: "CF MEGA BOT <cf-mega@pivotal.io>"
     file: cf-deployment-version
 - name: deliver-tracker-story
   type: tracker
@@ -282,6 +294,7 @@ resources:
   source:
     owner: cloudfoundry-incubator
     repository: bosh-backup-and-restore
+
 jobs:
 - name: branch-freshness
   public: true
@@ -294,6 +307,7 @@ jobs:
     file: runtime-ci/tasks/validate-branch-freshness/task.yml
     input_mapping:
       repo: cf-deployment-all-branches
+
 - name: fresh-acquire-pool
   serial: true
   public: true
@@ -301,13 +315,10 @@ jobs:
   - aggregate:
     - get: cf-deployment-develop
       trigger: true
-      passed:
-      - unit-test-ops-files
-      - unit-test-golang-tests
-      - unit-test-update-releases-coverage
+      passed: [unit-test-ops-files, unit-test-golang-tests, unit-test-update-releases-coverage]
     - put: fresh-pool
-      params:
-        acquire: true
+      params: {acquire: true}
+
 - name: upgrade-acquire-pool
   serial: true
   public: true
@@ -315,13 +326,10 @@ jobs:
   - aggregate:
     - get: cf-deployment-develop
       trigger: true
-      passed:
-      - unit-test-ops-files
-      - unit-test-golang-tests
-      - unit-test-update-releases-coverage
+      passed: [unit-test-ops-files, unit-test-golang-tests, unit-test-update-releases-coverage]
     - put: upgrade-pool
-      params:
-        acquire: true
+      params: {acquire: true}
+
 - name: lite-acquire-pool
   serial: true
   public: true
@@ -331,13 +339,10 @@ jobs:
     - aggregate:
       - get: cf-deployment-develop
         trigger: true
-        passed:
-        - unit-test-ops-files
-        - unit-test-golang-tests
-        - unit-test-update-releases-coverage
+        passed: [unit-test-ops-files, unit-test-golang-tests, unit-test-update-releases-coverage]
     - put: lite-pool
-      params:
-        acquire: true
+      params: {acquire: true}
+
 - name: bbr-acquire-pool
   public: true
   serial: true
@@ -346,13 +351,10 @@ jobs:
     aggregate:
     - get: cf-deployment-develop
       trigger: true
-      passed:
-      - unit-test-ops-files
-      - unit-test-golang-tests
-      - unit-test-update-releases-coverage
+      passed: [unit-test-ops-files, unit-test-golang-tests, unit-test-update-releases-coverage]
     - put: bbr-pool
-      params:
-        acquire: true
+      params: {acquire: true}
+
 - name: lint-cf-deployment-manifest
   serial: false
   public: true
@@ -374,6 +376,7 @@ jobs:
         - -exc
         - |
           ruby -e "require 'yaml'; YAML.load_file('./cf-deployment-develop/cf-deployment.yml')"
+
 - name: unit-test-golang-tests
   serial: true
   public: true
@@ -389,9 +392,12 @@ jobs:
           repository: relintdockerhubpushbot/bosh-cli
       inputs:
       - name: cf-deployment-develop
+      #! params:
+      #!   RUN_SEMANTIC: true
       run:
         dir: cf-deployment-develop/units
         path: ./test
+
 - name: unit-test-ops-files
   serial: true
   public: true
@@ -412,6 +418,7 @@ jobs:
       run:
         dir: cf-deployment-develop
         path: scripts/test
+
 - name: unit-test-update-releases-coverage
   serial: true
   public: true
@@ -432,31 +439,22 @@ jobs:
       run:
         dir: runtime-ci
         path: scripts/tests/update-releases-coverage-test
+
 - name: fresh-deploy
-  serial_groups:
-  - luna-smokes
+  serial_groups: [ luna-smokes ]
   public: true
   plan:
   - get: fresh-pool
     trigger: true
-    passed:
-    - fresh-acquire-pool
+    passed: [fresh-acquire-pool]
   - aggregate:
     - get: cf-deployment-develop
-      passed:
-      - fresh-acquire-pool
+      passed: [fresh-acquire-pool]
     - get: cf-deployment-concourse-tasks
     - get: runtime-ci
     - get: relint-envs
     - get: cf-smoke-tests
-  - task: delete-deployment
-    file: cf-deployment-concourse-tasks/bosh-delete-deployment/task.yml
-    input_mapping:
-      bbl-state: relint-envs
-    params:
-      IGNORE_ERRORS: true
-      BBL_STATE_DIR: environments/test/luna/bbl-state
-      DEPLOYMENT_NAME: luna-cf
+  - #@ delete_deployment("luna", True, "luna-cf")
   - task: collect-ops-files
     file: cf-deployment-concourse-tasks/collect-ops-files/task.yml
     input_mapping:
@@ -495,25 +493,8 @@ jobs:
         environments/test/luna/bbs-key-label.yml
         environments/test/luna/syslog-vars.yml
       REGENERATE_CREDENTIALS: true
-  - task: run-bosh-cleanup
-    file: cf-deployment-concourse-tasks/bosh-cleanup/task.yml
-    input_mapping:
-      bbl-state: relint-envs
-    params:
-      BBL_STATE_DIR: environments/test/luna/bbl-state
-  - task: update-integration-configs
-    file: cf-deployment-concourse-tasks/update-integration-configs/task.yml
-    params:
-      BBL_STATE_DIR: environments/test/luna/bbl-state
-      CATS_INTEGRATION_CONFIG_FILE: environments/test/luna/integration_config.json
-    input_mapping:
-      bbl-state: relint-envs
-      integration-configs: relint-envs
-    ensure:
-      put: relint-envs
-      params:
-        repository: updated-integration-configs
-        rebase: true
+  - #@ bosh_clean_up("luna")
+  - #@ update_integration_config("luna")
   - task: ensure-gcloud-backend-service-healthy
     file: runtime-ci/tasks/ensure-gcloud-backend-service-healthy/task.yml
     input_mapping:
@@ -537,26 +518,8 @@ jobs:
         CHECK_ISOLATION_SEGMENT: true
         CONFIG_FILE_PATH: environments/test/luna/integration_config.json
   - aggregate:
-    - task: open-asgs-for-credhub
-      file: cf-deployment-concourse-tasks/open-asgs-for-bosh-instance-group/task.yml
-      input_mapping:
-        bbl-state: relint-envs
-      params:
-        BBL_STATE_DIR: environments/test/luna/bbl-state
-        BOSH_DEPLOYMENT: luna-cf
-        INSTANCE_GROUP_NAME: credhub
-        SYSTEM_DOMAIN: luna.cf-app.com
-        SECURITY_GROUP_NAME: credhub
-    - task: open-asgs-for-uaa
-      file: cf-deployment-concourse-tasks/open-asgs-for-bosh-instance-group/task.yml
-      input_mapping:
-        bbl-state: relint-envs
-      params:
-        BBL_STATE_DIR: environments/test/luna/bbl-state
-        BOSH_DEPLOYMENT: luna-cf
-        INSTANCE_GROUP_NAME: uaa
-        SYSTEM_DOMAIN: luna.cf-app.com
-        SECURITY_GROUP_NAME: uaa
+    - #@ open_asg("luna", "credhub", "luna-cf")
+    - #@ open_asg("luna", "uaa", "luna-cf")
     - task: enable-docker-and-tasks
       attempts: 2
       file: cf-deployment-concourse-tasks/set-feature-flags/task.yml
@@ -568,28 +531,21 @@ jobs:
         ENABLED_FEATURE_FLAGS: |
           diego_docker
           task_creation
+
 - name: upgrade-deploy
   serial: true
   public: true
   plan:
   - get: upgrade-pool
     trigger: true
-    passed:
-    - upgrade-acquire-pool
+    passed: [upgrade-acquire-pool]
   - aggregate:
     - get: cf-deployment-develop
-      passed:
-      - upgrade-acquire-pool
+      passed: [upgrade-acquire-pool]
     - get: cf-deployment-concourse-tasks
     - get: runtime-ci
     - get: relint-envs
-  - task: add-tcp-domain
-    file: runtime-ci/tasks/add-tcp-domain/task.yml
-    input_mapping:
-      bbl-state: relint-envs
-    params:
-      BBL_STATE_DIR: environments/test/trelawney/bbl-state
-      SYSTEM_DOMAIN: trelawney.cf-app.com
+  - #@ add_tcp_domain("trelawney")
   - task: collect-ops-files
     file: cf-deployment-concourse-tasks/collect-ops-files/task.yml
     input_mapping:
@@ -639,44 +595,11 @@ jobs:
       RECENT_LOGS_THRESHOLD: 8
       STREAMING_LOGS_THRESHOLD: 2
       APP_SYSLOG_AVAILABILITY_THRESHOLD: 12
-  - task: run-bosh-cleanup
-    file: cf-deployment-concourse-tasks/bosh-cleanup/task.yml
-    input_mapping:
-      bbl-state: relint-envs
-    params:
-      BBL_STATE_DIR: environments/test/trelawney/bbl-state
-  - task: update-integration-configs
-    file: cf-deployment-concourse-tasks/update-integration-configs/task.yml
-    params:
-      BBL_STATE_DIR: environments/test/trelawney/bbl-state
-      CATS_INTEGRATION_CONFIG_FILE: environments/test/trelawney/integration_config.json
-    input_mapping:
-      bbl-state: relint-envs
-      integration-configs: relint-envs
-    ensure:
-      put: relint-envs
-      params:
-        repository: updated-integration-configs
-        rebase: true
+  - #@ bosh_clean_up("trelawney")
+  - #@ update_integration_config("trelawney")
   - aggregate:
-    - task: open-asgs-for-credhub
-      file: cf-deployment-concourse-tasks/open-asgs-for-bosh-instance-group/task.yml
-      input_mapping:
-        bbl-state: relint-envs
-      params:
-        BBL_STATE_DIR: environments/test/trelawney/bbl-state
-        INSTANCE_GROUP_NAME: credhub
-        SYSTEM_DOMAIN: trelawney.cf-app.com
-        SECURITY_GROUP_NAME: credhub
-    - task: open-asgs-for-uaa
-      file: cf-deployment-concourse-tasks/open-asgs-for-bosh-instance-group/task.yml
-      input_mapping:
-        bbl-state: relint-envs
-      params:
-        BBL_STATE_DIR: environments/test/trelawney/bbl-state
-        INSTANCE_GROUP_NAME: uaa
-        SYSTEM_DOMAIN: trelawney.cf-app.com
-        SECURITY_GROUP_NAME: uaa
+    - #@ open_asg("trelawney", "credhub")
+    - #@ open_asg("trelawney", "uaa")
     - task: enable-docker-and-tasks
       file: cf-deployment-concourse-tasks/set-feature-flags/task.yml
       input_mapping:
@@ -688,6 +611,7 @@ jobs:
           diego_docker
           task_creation
           service_instance_sharing
+
 - name: experimental-acquire-pool
   public: true
   serial: true
@@ -695,24 +619,19 @@ jobs:
   - aggregate:
     - get: cf-deployment-develop
       trigger: true
-      passed:
-      - unit-test-ops-files
-      - unit-test-golang-tests
-      - unit-test-update-releases-coverage
+      passed: [unit-test-ops-files, unit-test-golang-tests, unit-test-update-releases-coverage]
     - put: experimental-pool
-      params:
-        acquire: true
+      params: {acquire: true}
+
 - name: experimental-release-pool
   public: true
   plan:
   - get: experimental-pool
-    passed:
-    - experimental-cats
-    - experimental-smoke-tests
+    passed: [ experimental-cats, experimental-smoke-tests ]
     trigger: true
   - put: experimental-pool
-    params:
-      release: experimental-pool
+    params: {release: experimental-pool}
+
 - name: stable-acquire-pool
   public: true
   serial: true
@@ -721,8 +640,8 @@ jobs:
     - get: cf-deployment-master
       trigger: true
     - put: stable-pool
-      params:
-        acquire: true
+      params: {acquire: true}
+
 - name: fresh-release-pool-manual
   public: true
   plan:
@@ -730,8 +649,8 @@ jobs:
   ensure:
     try:
       put: fresh-pool
-      params:
-        release: fresh-pool
+      params: {release: fresh-pool}
+
 - name: upgrade-release-pool-manual
   public: true
   plan:
@@ -739,8 +658,8 @@ jobs:
   ensure:
     try:
       put: upgrade-pool
-      params:
-        release: upgrade-pool
+      params: {release: upgrade-pool}
+
 - name: bbr-release-pool-manual
   public: true
   plan:
@@ -748,29 +667,26 @@ jobs:
   ensure:
     try:
       put: bbr-pool
-      params:
-        release: bbr-pool
+      params: {release: bbr-pool}
+
 - name: upgrade-release-pool
   public: true
   plan:
   - get: upgrade-pool
-    passed:
-    - upgrade-cats
-    - upgrade-cats-windows2016
+    passed: [ upgrade-cats, upgrade-cats-windows2016 ]
     trigger: true
   - put: upgrade-pool
-    params:
-      release: upgrade-pool
+    params: {release: upgrade-pool}
+
 - name: bbr-release-pool
   public: true
   plan:
   - get: bbr-pool
-    passed:
-    - bbr-run-drats
+    passed: [ bbr-run-drats ]
     trigger: true
   - put: bbr-pool
-    params:
-      release: bbr-pool
+    params: {release: bbr-pool}
+
 - name: lite-release-pool-manual
   public: true
   plan:
@@ -778,8 +694,8 @@ jobs:
   ensure:
     try:
       put: lite-pool
-      params:
-        release: lite-pool
+      params: {release: lite-pool}
+
 - name: stable-release-pool-manual
   public: true
   plan:
@@ -787,8 +703,8 @@ jobs:
   ensure:
     try:
       put: stable-pool
-      params:
-        release: stable-pool
+      params: {release: stable-pool}
+
 - name: experimental-release-pool-manual
   public: true
   plan:
@@ -796,45 +712,34 @@ jobs:
   ensure:
     try:
       put: experimental-pool
-      params:
-        release: experimental-pool
+      params: {release: experimental-pool}
+
 - name: experimental-ops-files
   public: true
   plan:
   - aggregate:
     - get: experimental-pool
       trigger: true
-      passed:
-      - experimental-acquire-pool
+      passed: [ experimental-acquire-pool ]
     - get: runtime-ci
   - task: experimental-ops-files
     file: runtime-ci/tasks/summarize-ops-files/task.yml
+
 - name: experimental-deploy
-  serial_groups:
-  - hermione-wats
-  - hermione-cats
-  - hermione-smokes
+  serial_groups: [ hermione-wats, hermione-cats, hermione-smokes ]
   public: true
   plan:
   - do:
     - get: experimental-pool
       trigger: true
-      passed:
-      - experimental-acquire-pool
+      passed: [ experimental-acquire-pool ]
     - aggregate:
       - get: runtime-ci
       - get: cf-deployment-concourse-tasks
       - get: cf-deployment-develop
-        passed:
-        - experimental-acquire-pool
+        passed: [ experimental-acquire-pool ]
       - get: relint-envs
-    - task: add-tcp-domain
-      file: runtime-ci/tasks/add-tcp-domain/task.yml
-      input_mapping:
-        bbl-state: relint-envs
-      params:
-        BBL_STATE_DIR: environments/test/hermione/bbl-state
-        SYSTEM_DOMAIN: hermione.cf-app.com
+    - #@ add_tcp_domain("hermione")
     - task: collect-ops-files
       file: cf-deployment-concourse-tasks/collect-ops-files/task.yml
       input_mapping:
@@ -882,44 +787,11 @@ jobs:
         STREAMING_LOGS_THRESHOLD: 3
         APP_SYSLOG_AVAILABILITY_THRESHOLD: 5
         FAIL_ON_DOWNTIME: true
-    - task: run-bosh-cleanup
-      file: cf-deployment-concourse-tasks/bosh-cleanup/task.yml
-      input_mapping:
-        bbl-state: relint-envs
-      params:
-        BBL_STATE_DIR: environments/test/hermione/bbl-state
-    - task: update-integration-configs
-      file: cf-deployment-concourse-tasks/update-integration-configs/task.yml
-      params:
-        BBL_STATE_DIR: environments/test/hermione/bbl-state
-        CATS_INTEGRATION_CONFIG_FILE: environments/test/hermione/integration_config.json
-      input_mapping:
-        bbl-state: relint-envs
-        integration-configs: relint-envs
-      ensure:
-        put: relint-envs
-        params:
-          repository: updated-integration-configs
-          rebase: true
+    - #@ bosh_clean_up("hermione")
+    - #@ update_integration_config("hermione")
     - aggregate:
-      - task: open-asgs-for-credhub
-        file: cf-deployment-concourse-tasks/open-asgs-for-bosh-instance-group/task.yml
-        input_mapping:
-          bbl-state: relint-envs
-        params:
-          BBL_STATE_DIR: environments/test/hermione/bbl-state
-          INSTANCE_GROUP_NAME: credhub
-          SYSTEM_DOMAIN: hermione.cf-app.com
-          SECURITY_GROUP_NAME: credhub
-      - task: open-asgs-for-uaa
-        file: cf-deployment-concourse-tasks/open-asgs-for-bosh-instance-group/task.yml
-        input_mapping:
-          bbl-state: relint-envs
-        params:
-          BBL_STATE_DIR: environments/test/hermione/bbl-state
-          INSTANCE_GROUP_NAME: uaa
-          SYSTEM_DOMAIN: hermione.cf-app.com
-          SECURITY_GROUP_NAME: uaa
+      - #@ open_asg("hermione", "credhub")
+      - #@ open_asg("hermione", "uaa")
       - task: set-feature-flags
         file: cf-deployment-concourse-tasks/set-feature-flags/task.yml
         input_mapping:
@@ -931,20 +803,18 @@ jobs:
             diego_docker
             task_creation
             service_instance_sharing
+
 - name: stable-deploy
-  serial_groups:
-  - bellatrix-smokes
+  serial_groups: [ bellatrix-smokes ]
   public: true
   plan:
   - on_success:
       put: stable-pool
-      params:
-        release: stable-pool
+      params: {release: stable-pool}
     do:
     - get: stable-pool
       trigger: true
-      passed:
-      - stable-acquire-pool
+      passed: [ stable-acquire-pool ]
     - aggregate:
       - get: runtime-ci
       - get: cf-deployment-concourse-tasks
@@ -956,7 +826,7 @@ jobs:
         base-ops-files: cf-deployment-master
         new-ops-files: relint-envs
       params:
-        BASE_OPS_FILE_DIR: operations
+        BASE_OPS_FILE_DIR: "operations"
         NEW_OPS_FILES: |
           environments/test/bellatrix/decrease-cc-event-retention.yml
     - task: bosh-deploy-cf
@@ -973,69 +843,28 @@ jobs:
           operations/scale-database-cluster.yml
           operations/windows2016-cell.yml
           operations/decrease-cc-event-retention.yml
-    - task: run-bosh-cleanup
-      file: cf-deployment-concourse-tasks/bosh-cleanup/task.yml
-      input_mapping:
-        bbl-state: relint-envs
-      params:
-        BBL_STATE_DIR: environments/test/bellatrix/bbl-state
-    - task: update-integration-configs
-      file: cf-deployment-concourse-tasks/update-integration-configs/task.yml
-      params:
-        BBL_STATE_DIR: environments/test/bellatrix/bbl-state
-        CATS_INTEGRATION_CONFIG_FILE: environments/test/bellatrix/integration_config.json
-      input_mapping:
-        bbl-state: relint-envs
-        integration-configs: relint-envs
-      ensure:
-        put: relint-envs
-        params:
-          repository: updated-integration-configs
-          rebase: true
-    - task: open-asgs-for-credhub
-      file: cf-deployment-concourse-tasks/open-asgs-for-bosh-instance-group/task.yml
-      input_mapping:
-        bbl-state: relint-envs
-      params:
-        BBL_STATE_DIR: environments/test/bellatrix/bbl-state
-        INSTANCE_GROUP_NAME: credhub
-        SYSTEM_DOMAIN: bellatrix.cf-app.com
-        SECURITY_GROUP_NAME: credhub
-    - task: open-asgs-for-uaa
-      file: cf-deployment-concourse-tasks/open-asgs-for-bosh-instance-group/task.yml
-      input_mapping:
-        bbl-state: relint-envs
-      params:
-        BBL_STATE_DIR: environments/test/bellatrix/bbl-state
-        INSTANCE_GROUP_NAME: uaa
-        SYSTEM_DOMAIN: bellatrix.cf-app.com
-        SECURITY_GROUP_NAME: uaa
+    - #@ bosh_clean_up("bellatrix")
+    - #@ update_integration_config("bellatrix")
+    - #@ open_asg("bellatrix", "credhub")
+    - #@ open_asg("bellatrix", "uaa")
+
 - name: lite-deploy
   public: true
-  serial_groups:
-  - snitch-cats
+  serial_groups: [ snitch-cats ]
   plan:
   - timeout: 4h
     do:
     - get: lite-pool
       trigger: true
-      passed:
-      - lite-acquire-pool
+      passed: [lite-acquire-pool]
     - aggregate:
       - get: runtime-ci
       - get: cf-deployment-concourse-tasks
       - get: cf-deployment-develop
-        passed:
-        - lite-acquire-pool
+        passed: [lite-acquire-pool]
       - get: bosh-deployment
       - get: relint-envs
-    - task: delete-deployment
-      file: cf-deployment-concourse-tasks/bosh-delete-deployment/task.yml
-      input_mapping:
-        bbl-state: relint-envs
-      params:
-        IGNORE_ERRORS: true
-        BBL_STATE_DIR: environments/test/snitch/bbl-state
+    - #@ delete_deployment("snitch", True)
     - task: collect-ops-files
       file: cf-deployment-concourse-tasks/collect-ops-files/task.yml
       input_mapping:
@@ -1064,44 +893,11 @@ jobs:
           operations/use-debug-level-logging.yml
         REGENERATE_CREDENTIALS: true
         BOSH_LITE: true
-    - task: run-bosh-cleanup
-      file: cf-deployment-concourse-tasks/bosh-cleanup/task.yml
-      input_mapping:
-        bbl-state: relint-envs
-      params:
-        BBL_STATE_DIR: environments/test/snitch/bbl-state
-    - task: update-integration-configs
-      file: cf-deployment-concourse-tasks/update-integration-configs/task.yml
-      params:
-        BBL_STATE_DIR: environments/test/snitch/bbl-state
-        CATS_INTEGRATION_CONFIG_FILE: environments/test/snitch/integration_config.json
-      input_mapping:
-        bbl-state: relint-envs
-        integration-configs: relint-envs
-      ensure:
-        put: relint-envs
-        params:
-          repository: updated-integration-configs
-          rebase: true
+    - #@ bosh_clean_up("snitch")
+    - #@ update_integration_config("snitch")
     - aggregate:
-      - task: open-asgs-for-credhub
-        file: cf-deployment-concourse-tasks/open-asgs-for-bosh-instance-group/task.yml
-        input_mapping:
-          bbl-state: relint-envs
-        params:
-          BBL_STATE_DIR: environments/test/snitch/bbl-state
-          INSTANCE_GROUP_NAME: credhub
-          SYSTEM_DOMAIN: snitch.cf-app.com
-          SECURITY_GROUP_NAME: credhub
-      - task: open-asgs-for-uaa
-        file: cf-deployment-concourse-tasks/open-asgs-for-bosh-instance-group/task.yml
-        input_mapping:
-          bbl-state: relint-envs
-        params:
-          BBL_STATE_DIR: environments/test/snitch/bbl-state
-          INSTANCE_GROUP_NAME: uaa
-          SYSTEM_DOMAIN: snitch.cf-app.com
-          SECURITY_GROUP_NAME: uaa
+      - #@ open_asg("snitch", "credhub")
+      - #@ open_asg("snitch", "uaa")
       - task: enable-docker-and-tasks
         file: cf-deployment-concourse-tasks/set-feature-flags/task.yml
         input_mapping:
@@ -1112,48 +908,36 @@ jobs:
           ENABLED_FEATURE_FLAGS: |
             diego_docker
             task_creation
+
 - name: experimental-cats
-  serial_groups:
-  - hermione-cats
+  serial_groups: [ hermione-cats ]
   public: true
   plan:
   - timeout: 4h
     do:
     - get: experimental-pool
       trigger: true
-      passed:
-      - experimental-deploy
+      passed: [ experimental-deploy ]
     - aggregate:
       - get: cf-acceptance-tests-rc
       - get: relint-envs
       - get: cf-deployment-develop
-        passed:
-        - experimental-deploy
+        passed: [ experimental-deploy ]
       - get: cf-deployment-concourse-tasks
-    - task: run-cats
-      input_mapping:
-        integration-config: relint-envs
-        cf-acceptance-tests: cf-acceptance-tests-rc
-      file: cf-deployment-concourse-tasks/run-cats/task.yml
-      params:
-        CONFIG_FILE_PATH: environments/test/hermione/integration_config.json
-        REPORTER_CONFIG_FILE_PATH: environments/test/hermione/reporter_config.json
-        RELINT_VERBOSE_AUTH: "true"
+    - #@ run_cats("hermione")
+
 - name: experimental-smoke-tests
   public: true
-  serial_groups:
-  - hermione-smokes
+  serial_groups: [ hermione-smokes ]
   plan:
   - do:
     - get: experimental-pool
-      passed:
-      - experimental-deploy
+      passed: [ experimental-deploy ]
       trigger: true
     - aggregate:
       - get: relint-envs
       - get: cf-deployment-develop
-        passed:
-        - experimental-deploy
+        passed: [ experimental-deploy ]
       - get: cf-deployment-concourse-tasks
     timeout: 1h
   - task: bosh-run-errand-smoke-tests
@@ -1163,21 +947,19 @@ jobs:
       ERRAND_NAME: smoke-tests
     input_mapping:
       bbl-state: relint-envs
+
 - name: fresh-smoke-tests
   public: true
-  serial_groups:
-  - luna-smokes
+  serial_groups: [ luna-smokes ]
   plan:
   - do:
     - get: fresh-pool
-      passed:
-      - fresh-deploy
+      passed: [ fresh-deploy ]
       trigger: true
     - aggregate:
       - get: relint-envs
       - get: cf-deployment-develop
-        passed:
-        - fresh-deploy
+        passed: [ fresh-deploy ]
       - get: cf-deployment-concourse-tasks
     timeout: 1h
   - task: bosh-run-errand-smoke-tests
@@ -1188,24 +970,21 @@ jobs:
       DEPLOYMENT_NAME: luna-cf
     input_mapping:
       bbl-state: relint-envs
+
 - name: stable-smoke-tests
-  serial_groups:
-  - bellatrix-smokes
+  serial_groups: [bellatrix-smokes]
   public: true
   plan:
   - timeout: 1h
     do:
     - get: stable-pool
       trigger: true
-      passed:
-      - stable-deploy
+      passed: [stable-deploy]
     - aggregate:
       - get: relint-envs
-        passed:
-        - stable-deploy
+        passed: [stable-deploy]
       - get: cf-deployment-master
-        passed:
-        - stable-deploy
+        passed: [stable-deploy]
       - get: cf-deployment-concourse-tasks
   - task: bosh-run-errand-smoke-tests
     file: cf-deployment-concourse-tasks/run-errand/task.yml
@@ -1216,19 +995,17 @@ jobs:
       ERRAND_NAME: smoke-tests
     on_failure:
       put: stable-pool
-      params:
-        release: stable-pool
+      params: {release: stable-pool}
+
 - name: bbr-deploy
   public: true
   plan:
   - get: bbr-pool
     trigger: true
-    passed:
-    - bbr-acquire-pool
+    passed: [ bbr-acquire-pool ]
   - aggregate:
     - get: cf-deployment-develop
-      passed:
-      - bbr-acquire-pool
+      passed: [bbr-acquire-pool]
     - get: cf-deployment-concourse-tasks
     - get: runtime-ci
     - get: relint-envs
@@ -1247,24 +1024,8 @@ jobs:
         operations/backup-and-restore/enable-backup-restore.yml
         operations/enable-nfs-volume-service.yml
         operations/backup-and-restore/enable-backup-restore-nfs-broker.yml
-  - task: open-asgs-for-credhub
-    file: cf-deployment-concourse-tasks/open-asgs-for-bosh-instance-group/task.yml
-    input_mapping:
-      bbl-state: relint-envs
-    params:
-      BBL_STATE_DIR: environments/test/bbr/bbl-state
-      INSTANCE_GROUP_NAME: credhub
-      SYSTEM_DOMAIN: baba-yaga.cf-app.com
-      SECURITY_GROUP_NAME: credhub
-  - task: open-asgs-for-uaa
-    file: cf-deployment-concourse-tasks/open-asgs-for-bosh-instance-group/task.yml
-    input_mapping:
-      bbl-state: relint-envs
-    params:
-      BBL_STATE_DIR: environments/test/bbr/bbl-state
-      INSTANCE_GROUP_NAME: uaa
-      SYSTEM_DOMAIN: baba-yaga.cf-app.com
-      SECURITY_GROUP_NAME: uaa
+  - #@ open_asg("bbr", "credhub", system_domain="baba-yaga.cf-app.com")
+  - #@ open_asg("bbr", "uaa", system_domain="baba-yaga.cf-app.com")
   - task: run-nfs-broker-push-errand
     file: cf-deployment-concourse-tasks/run-errand/task.yml
     input_mapping:
@@ -1272,23 +1033,17 @@ jobs:
     params:
       BBL_STATE_DIR: environments/test/bbr/bbl-state
       ERRAND_NAME: nfs-broker-push
-  - task: run-bosh-cleanup
-    file: cf-deployment-concourse-tasks/bosh-cleanup/task.yml
-    input_mapping:
-      bbl-state: relint-envs
-    params:
-      BBL_STATE_DIR: environments/test/bbr/bbl-state
+  - #@ bosh_clean_up("bbr")
+
 - name: bbr-run-drats
   public: true
   plan:
   - get: bbr-pool
     trigger: true
-    passed:
-    - bbr-deploy
+    passed: [ bbr-deploy ]
   - aggregate:
     - get: cf-deployment-develop
-      passed:
-      - bbr-deploy
+      passed: [ bbr-deploy ]
     - get: bbr-github-release
     - get: relint-envs
     - get: cf-deployment-concourse-tasks
@@ -1308,6 +1063,7 @@ jobs:
       disaster-recovery-acceptance-tests: drats-master
       bbr-binary-release: bbr-github-release
       drats-integration-config: drats-config
+
 - name: stable-semihourly-pool-acquisition
   serial: true
   public: true
@@ -1317,8 +1073,8 @@ jobs:
     - get: half-hourly
       trigger: true
     - put: stable-pool
-      params:
-        claim: bellatrix
+      params: {claim: bellatrix}
+
 - name: stable-periodic-cats
   serial: true
   public: true
@@ -1326,20 +1082,17 @@ jobs:
   - timeout: 4h
     on_failure:
       put: stable-pool
-      params:
-        release: stable-pool
+      params: {release: stable-pool}
     do:
     - get: stable-pool
       trigger: true
-      passed:
-      - stable-semihourly-pool-acquisition
+      passed: [ stable-semihourly-pool-acquisition ]
     - aggregate:
       - get: cf-deployment-concourse-tasks
       - get: cf-acceptance-tests
       - get: relint-envs
       - get: cf-deployment-master
-        passed:
-        - stable-deploy
+        passed: [ stable-deploy ]
     - task: enable-docker-and-tasks
       file: cf-deployment-concourse-tasks/set-feature-flags/task.yml
       input_mapping:
@@ -1360,6 +1113,7 @@ jobs:
         REPORTER_CONFIG_FILE_PATH: environments/test/bellatrix/reporter_config.json
         FLAKE_ATTEMPTS: 0
         RELINT_VERBOSE_AUTH: "true"
+
 - name: cleanup-stable-periodic-cats
   serial: true
   public: true
@@ -1368,8 +1122,7 @@ jobs:
     do:
     - get: stable-pool
       trigger: true
-      passed:
-      - stable-periodic-cats
+      passed: [ stable-periodic-cats ]
     - aggregate:
       - get: runtime-ci
       - get: relint-envs
@@ -1379,33 +1132,31 @@ jobs:
         integration-config: relint-envs
       params:
         CONFIG_FILE_PATH: environments/test/bellatrix/integration_config.json
+
 - name: stable-update-cats-cfd-branch
   public: true
   plan:
   - timeout: 4h
     ensure:
       put: stable-pool
-      params:
-        release: stable-pool
+      params: {release: stable-pool}
     do:
     - get: stable-pool
       trigger: true
-      passed:
-      - stable-periodic-cats
+      passed: [ stable-periodic-cats ]
     - aggregate:
       - get: runtime-ci
       - get: cf-deployment-master
-        passed:
-        - stable-periodic-cats
+        passed: [ stable-periodic-cats ]
       - get: cf-acceptance-tests
-        passed:
-        - stable-periodic-cats
+        passed: [ stable-periodic-cats ]
     - task: update-branch
       file: runtime-ci/tasks/update-cats-branch-with-cf-deployment-version/task.yml
       input_mapping:
         cf-deployment: cf-deployment-master
       params:
         DEPLOY_KEY: ((cf_acceptance_tests_readwrite_deploy_key.private_key))
+
 - name: fresh-cats
   serial: true
   public: true
@@ -1414,25 +1165,15 @@ jobs:
     do:
     - get: fresh-pool
       trigger: true
-      passed:
-      - fresh-deploy
+      passed: [ fresh-deploy ]
     - aggregate:
       - get: cf-deployment-concourse-tasks
       - get: cf-acceptance-tests-rc
       - get: relint-envs
       - get: cf-deployment-develop
-        passed:
-        - fresh-deploy
-    - task: run-cats
-      input_mapping:
-        integration-config: relint-envs
-        cf-acceptance-tests: cf-acceptance-tests-rc
-      file: cf-deployment-concourse-tasks/run-cats/task.yml
-      params:
-        CONFIG_FILE_PATH: environments/test/luna/integration_config.json
-        REPORTER_CONFIG_FILE_PATH: environments/test/luna/reporter_config.json
-        RELINT_VERBOSE_AUTH: "true"
-        CAPTURE_LOGS: true
+        passed: [ fresh-deploy ]
+    - #@ run_cats("luna", capture_logs=True)
+
 - name: upgrade-cats
   serial: true
   public: true
@@ -1441,25 +1182,15 @@ jobs:
     do:
     - get: upgrade-pool
       trigger: true
-      passed:
-      - upgrade-deploy
+      passed: [upgrade-deploy]
     - aggregate:
       - get: cf-deployment-concourse-tasks
       - get: cf-acceptance-tests-rc
       - get: relint-envs
       - get: cf-deployment-develop
-        passed:
-        - upgrade-deploy
-    - task: run-cats
-      input_mapping:
-        integration-config: relint-envs
-        cf-acceptance-tests: cf-acceptance-tests-rc
-      file: cf-deployment-concourse-tasks/run-cats/task.yml
-      params:
-        CONFIG_FILE_PATH: environments/test/trelawney/integration_config.json
-        REPORTER_CONFIG_FILE_PATH: environments/test/trelawney/reporter_config.json
-        RELINT_VERBOSE_AUTH: "true"
-        CAPTURE_LOGS: true
+        passed: [upgrade-deploy]
+    - #@ run_cats("trelawney", capture_logs=True)
+
 - name: upgrade-cats-windows2016
   serial: true
   public: true
@@ -1468,15 +1199,13 @@ jobs:
     do:
     - get: upgrade-pool
       trigger: true
-      passed:
-      - upgrade-deploy
+      passed: [upgrade-deploy]
     - aggregate:
       - get: cf-deployment-concourse-tasks
       - get: cf-acceptance-tests-rc
       - get: relint-envs
       - get: cf-deployment-develop
-        passed:
-        - upgrade-deploy
+        passed: [upgrade-deploy]
     - task: run-cats
       file: cf-deployment-concourse-tasks/run-cats/task.yml
       input_mapping:
@@ -1488,34 +1217,24 @@ jobs:
         REPORTER_CONFIG_FILE_PATH: environments/test/trelawney/reporter_config.json
         NODES: 8
         RELINT_VERBOSE_AUTH: "true"
+
 - name: lite-cats
-  serial_groups:
-  - snitch-cats
+  serial_groups: [ snitch-cats ]
   public: true
   plan:
   - timeout: 4h
     do:
     - get: lite-pool
       trigger: true
-      passed:
-      - lite-deploy
+      passed: [ lite-deploy ]
     - aggregate:
       - get: cf-acceptance-tests-rc
       - get: cf-deployment-develop
-        passed:
-        - lite-deploy
+        passed: [ lite-deploy ]
       - get: relint-envs
       - get: cf-deployment-concourse-tasks
-    - task: run-cats
-      input_mapping:
-        integration-config: relint-envs
-        cf-acceptance-tests: cf-acceptance-tests-rc
-      file: cf-deployment-concourse-tasks/run-cats/task.yml
-      params:
-        CONFIG_FILE_PATH: environments/test/snitch/integration_config.json
-        REPORTER_CONFIG_FILE_PATH: environments/test/snitch/reporter_config.json
-        RELINT_VERBOSE_AUTH: "true"
-        NODES: 2
+    - #@ run_cats("snitch", nodes=2)
+
 - name: lite-recreate-director
   serial: true
   public: true
@@ -1531,13 +1250,7 @@ jobs:
       - get: relint-envs
       - get: runtime-ci
       - get: bosh-bootloader
-    - task: delete-deployment
-      file: cf-deployment-concourse-tasks/bosh-delete-deployment/task.yml
-      input_mapping:
-        bbl-state: relint-envs
-      params:
-        IGNORE_ERRORS: true
-        BBL_STATE_DIR: environments/test/snitch/bbl-state
+    - #@ delete_deployment("snitch", True)
     - task: combine-bbl-configs
       file: runtime-ci/tasks/combine-inputs/task.yml
       input_mapping:
@@ -1566,8 +1279,8 @@ jobs:
           repository: updated-bbl-state
           rebase: true
     - put: lite-pool
-      params:
-        release: lite-pool
+      params: {release: lite-pool}
+
 - name: fresh-delete-deployment
   serial: true
   public: true
@@ -1582,17 +1295,10 @@ jobs:
     - aggregate:
       - get: cf-deployment-concourse-tasks
       - get: relint-envs
-    - task: delete-deployment
-      file: cf-deployment-concourse-tasks/bosh-delete-deployment/task.yml
-      input_mapping:
-        bbl-state: relint-envs
-      params:
-        IGNORE_ERRORS: true
-        BBL_STATE_DIR: environments/test/luna/bbl-state
-        DEPLOYMENT_NAME: luna-cf
+    - #@ delete_deployment("luna", True, "luna-cf")
     - put: fresh-pool
-      params:
-        release: fresh-pool
+      params: {release: fresh-pool}
+
 - name: bless-manifest
   public: true
   serial: true
@@ -1614,7 +1320,8 @@ jobs:
   - put: deliver-tracker-story
     params:
       repos:
-      - cf-deployment-develop
+        - cf-deployment-develop
+
 - name: release-notes-template
   public: true
   plan:
@@ -1627,81 +1334,7 @@ jobs:
       trigger: true
   - task: generate-cf-deployment-release-notes-template
     file: runtime-ci/tasks/cf-deployment-release-notes-template/task.yml
-- name: ship-it-patch
-  public: true
-  plan:
-  - do:
-    - get: runtime-ci
-    - get: cf-deployment-version
-      params:
-        bump: patch
-    - get: cf-deployment-develop
-    - get: cf-deployment-release-candidate
-      passed:
-      - bless-manifest
-    - task: update-cf-deployment-manifest-version
-      file: runtime-ci/tasks/record-cfd-version-in-manifest/task.yml
-    - put: cf-deployment-master
-      params:
-        repository: cf-deployment-rc-with-updated-version
-        tag: cf-deployment-version/version
-        tag_prefix: v
-    - put: cf-deployment-develop
-      params:
-        repository: cf-deployment-rc-with-updated-version
-        merge: true
-    - put: cf-deployment-version
-      params:
-        bump: patch
-- name: ship-it-minor
-  public: true
-  plan:
-  - do:
-    - get: runtime-ci
-    - get: cf-deployment-version
-      params:
-        bump: minor
-    - get: cf-deployment-develop
-    - get: cf-deployment-release-candidate
-      passed:
-      - bless-manifest
-    - task: update-cf-deployment-manifest-version
-      file: runtime-ci/tasks/record-cfd-version-in-manifest/task.yml
-    - put: cf-deployment-master
-      params:
-        repository: cf-deployment-rc-with-updated-version
-        tag: cf-deployment-version/version
-        tag_prefix: v
-    - put: cf-deployment-develop
-      params:
-        repository: cf-deployment-rc-with-updated-version
-        merge: true
-    - put: cf-deployment-version
-      params:
-        bump: minor
-- name: ship-it-major
-  public: true
-  plan:
-  - do:
-    - get: runtime-ci
-    - get: cf-deployment-version
-      params:
-        bump: major
-    - get: cf-deployment-develop
-    - get: cf-deployment-release-candidate
-      passed:
-      - bless-manifest
-    - task: update-cf-deployment-manifest-version
-      file: runtime-ci/tasks/record-cfd-version-in-manifest/task.yml
-    - put: cf-deployment-master
-      params:
-        repository: cf-deployment-rc-with-updated-version
-        tag: cf-deployment-version/version
-        tag_prefix: v
-    - put: cf-deployment-develop
-      params:
-        repository: cf-deployment-rc-with-updated-version
-        merge: true
-    - put: cf-deployment-version
-      params:
-        bump: major
+
+- #@ ship_it("patch")
+- #@ ship_it("minor")
+- #@ ship_it("major")

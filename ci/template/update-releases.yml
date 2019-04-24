@@ -1,4 +1,9 @@
 #@ load("@ytt:data", "data")
+#@ load("helpers.lib.yml",
+#@   "manage_gcp_dns",
+#@   "delete_deployment",
+#@   "bosh_clean_up",
+#@ )
 
 ---
 groups:
@@ -144,13 +149,7 @@ jobs:
       BBL_STATE_DIR: environments/test/greengrass/bbl-state
       DEPLOYMENT_NAME_SUFFIX: #@ r.name
       SYSTEM_DOMAIN: greengrass.cf-app.com
-  - task: bosh-delete-deployment
-    file: cf-deployment-concourse-tasks/bosh-delete-deployment/task.yml
-    input_mapping:
-      bbl-state: relint-envs
-    params:
-      BBL_STATE_DIR: environments/test/greengrass/bbl-state
-      DEPLOYMENT_NAME: #@ "cf-dry-run-" + r.name
+  - #@ delete_deployment("greengrass", deployment="cf-dry-run-" + r.name)
   #@ end
   - task: compile-release
     file: runtime-ci/tasks/compile-release-from-manifest/task.yml
@@ -482,12 +481,7 @@ jobs:
     - get: relint-envs
     - get: runtime-ci
     - get: cf-deployment-concourse-tasks
-  - task: guarantee-no-existing-cf-deployment
-    file: cf-deployment-concourse-tasks/bosh-delete-deployment/task.yml
-    input_mapping:
-      bbl-state: relint-envs
-    params:
-      BBL_STATE_DIR: environments/test/greengrass/bbl-state
+  - #@ delete_deployment("greengrass")
   - task: destroy-infrastructure
     file: cf-deployment-concourse-tasks/bbl-destroy/task.yml
     input_mapping:
@@ -513,12 +507,7 @@ jobs:
       - get: relint-envs
       - get: daily
         trigger: true
-    - task: run-bosh-cleanup
-      file: cf-deployment-concourse-tasks/bosh-cleanup/task.yml
-      input_mapping:
-        bbl-state: relint-envs
-      params:
-        BBL_STATE_DIR: environments/test/greengrass/bbl-state
+    - #@ bosh_clean_up("greengrass")
     - task: upload-stemcell
       file: cf-deployment-concourse-tasks/bosh-upload-stemcells/task.yml
       input_mapping:
